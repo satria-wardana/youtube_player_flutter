@@ -4,15 +4,12 @@ import 'dart:developer';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:meta/meta.dart';
 import 'package:url_launcher/url_launcher.dart' as uri_launcher;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
 import 'package:youtube_player_iframe/src/iframe_api/src/functions/video_information.dart';
-import 'package:youtube_player_iframe/src/player_value.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
-import 'package:youtube_player_iframe_web/youtube_player_iframe_web.dart';
 
 import 'youtube_player_event_handler.dart';
 
@@ -29,8 +26,8 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
   YoutubePlayerController({
     this.params = const YoutubePlayerParams(),
     ValueChanged<YoutubeWebResourceError>? onWebResourceError,
+    this.key,
   }) {
-    registerYoutubePlayerIframeWeb();
     _eventHandler = YoutubePlayerEventHandler(this);
 
     late final PlatformWebViewControllerCreationParams webViewParams;
@@ -60,7 +57,7 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(navigationDelegate)
       ..setUserAgent(params.userAgent)
-      ..addJavaScriptChannel('YoutubePlayer', onMessageReceived: _eventHandler)
+      ..addJavaScriptChannel(playerId, onMessageReceived: _eventHandler.call)
       ..enableZoom(false);
 
     final webViewPlatform = webViewController.platform;
@@ -80,7 +77,7 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
     double? startSeconds,
     double? endSeconds,
   }) {
-    final controller = YoutubePlayerController(params: params);
+    final controller = YoutubePlayerController(params: params, key: videoId);
 
     if (autoPlay) {
       controller.loadVideoById(
@@ -98,6 +95,9 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
 
     return controller;
   }
+
+  /// The unique key for the player.
+  final String? key;
 
   /// Defines player parameters for the youtube player.
   final YoutubePlayerParams params;
@@ -247,7 +247,11 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
   /// Loads the player with default [params].
   @internal
   Future<void> init() async {
-    await load(params: params, baseUrl: params.origin);
+    await load(
+      params: params,
+      baseUrl: kIsWeb ? Uri.base.origin : params.origin,
+      id: playerId,
+    );
 
     if (!_initCompleter.isCompleted) _initCompleter.complete();
   }
@@ -258,19 +262,19 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
   Future<void> load({
     required YoutubePlayerParams params,
     String? baseUrl,
+    String id = 'player',
   }) async {
-    final playerHtml = await rootBundle.loadString(
-      'packages/youtube_player_iframe/assets/player.html',
-    );
-
     final platform = kIsWeb ? 'web' : defaultTargetPlatform.name.toLowerCase();
+    final playerData = {
+      'playerId': id,
+      'pointerEvents': params.pointerEvents.name,
+      'playerVars': params.toJson(),
+      'platform': platform,
+      'host': params.origin ?? 'https://www.youtube.com',
+    };
 
     await webViewController.loadHtmlString(
-      playerHtml
-          .replaceFirst('<<pointerEvents>>', params.pointerEvents.name)
-          .replaceFirst('<<playerVars>>', params.toJson())
-          .replaceFirst('<<platform>>', platform)
-          .replaceFirst('<<host>>', params.origin ?? 'https://www.youtube.com'),
+      await _buildPlayerHTML(playerData),
       baseUrl: baseUrl,
     );
   }
@@ -321,6 +325,10 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
     return data == null ? '' : jsonEncode(data);
   }
 
+  /// The unique player id.
+  @internal
+  String get playerId => 'Youtube${key ?? hashCode}';
+
   /// MetaData for the currently loaded or cued video.
   YoutubeMetaData get metadata => _value.metaData;
 
@@ -334,6 +342,8 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
     YoutubeError? error,
     YoutubeMetaData? metaData,
   }) {
+    if (_valueController.isClosed) return;
+
     final updatedValue = YoutubePlayerValue(
       fullScreenOption: fullScreenOption ?? value.fullScreenOption,
       playerState: playerState ?? value.playerState,
@@ -597,10 +607,6 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
     _onFullscreenChanged = callback;
   }
 
-  /// Called when full screen mode for the player changes.
-  @Deprecated('Use setFullScreenListener instead')
-  void Function(bool isFullscreen) onFullscreenChange = (_) {};
-
   /// Toggles fullscreen mode.
   ///
   /// If [lock] is true, auto rotate will be disabled.
@@ -653,6 +659,7 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
         final videoId = params['v'];
         if (videoId != null) loadVideoById(videoId: videoId);
         break;
+      case 'emb_title':
       case 'emb_logo':
       case 'social':
       case 'wl_button':
@@ -663,8 +670,21 @@ class YoutubePlayerController implements YoutubePlayerIFrameAPI {
     return NavigationDecision.prevent;
   }
 
+  Future<String> _buildPlayerHTML(Map<String, String> data) async {
+    final playerHtml = await rootBundle.loadString(
+      'packages/youtube_player_iframe/assets/player.html',
+    );
+
+    return playerHtml.replaceAllMapped(
+      RegExp(r'<<([a-zA-Z]+)>>'),
+      (m) => data[m.group(1)] ?? m.group(0)!,
+    );
+  }
+
   /// Disposes the resources created by [YoutubePlayerController].
   Future<void> close() async {
+    await stopVideo();
+    await webViewController.removeJavaScriptChannel('youtube-$hashCode');
     await _eventHandler.videoStateController.close();
     await _valueController.close();
   }
