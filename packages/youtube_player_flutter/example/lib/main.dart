@@ -14,20 +14,22 @@ void main() {
       statusBarColor: Colors.blueAccent,
     ),
   );
-  runApp(YoutubePlayerDemoApp());
+  runApp(const YoutubePlayerDemoApp());
 }
 
 /// Creates [YoutubePlayerDemoApp] widget.
 class YoutubePlayerDemoApp extends StatelessWidget {
+  const YoutubePlayerDemoApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Youtube Player Flutter',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        colorSchemeSeed: Colors.blue,
         appBarTheme: const AppBarTheme(
-          color: Colors.blueAccent,
+          backgroundColor: Colors.blueAccent,
           titleTextStyle: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w300,
@@ -38,15 +40,17 @@ class YoutubePlayerDemoApp extends StatelessWidget {
           color: Colors.blueAccent,
         ),
       ),
-      home: MyHomePage(),
+      home: const MyHomePage(),
     );
   }
 }
 
 /// Homepage
 class MyHomePage extends StatefulWidget {
+  const MyHomePage({super.key});
+
   @override
-  _MyHomePageState createState() => _MyHomePageState();
+  State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
@@ -163,13 +167,6 @@ class _MyHomePageState extends State<MyHomePage> {
       ),
       builder: (context, player) => Scaffold(
         appBar: AppBar(
-          leading: Padding(
-            padding: const EdgeInsets.only(left: 12.0),
-            child: Image.asset(
-              'assets/ypf.png',
-              fit: BoxFit.fitWidth,
-            ),
-          ),
           title: const Text(
             'Youtube Player Flutter',
             style: TextStyle(color: Colors.white),
@@ -180,7 +177,7 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: () => Navigator.push(
                 context,
                 CupertinoPageRoute(
-                  builder: (context) => VideoList(),
+                  builder: (context) => const VideoList(),
                 ),
               ),
             ),
@@ -220,7 +217,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     controller: _idController,
                     decoration: InputDecoration(
                       border: InputBorder.none,
-                      hintText: 'Enter youtube \<video id\> or \<link\>',
+                      hintText: 'Enter youtube <video id> or <link>',
                       fillColor: Colors.blueAccent.withAlpha(20),
                       filled: true,
                       hintStyle: const TextStyle(
@@ -387,8 +384,6 @@ class _MyHomePageState extends State<MyHomePage> {
         return Colors.yellow;
       case PlayerState.cued:
         return Colors.blue[900]!;
-      default:
-        return Colors.blue;
     }
   }
 
